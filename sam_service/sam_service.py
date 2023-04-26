@@ -71,11 +71,10 @@ def prediction():
     logging.info('mask returned from predictor ...')
 
     # return the mask.
-    # file_stream = BytesIO(file_data)
     file_stream = BytesIO(mask_image)
     logging.info('file_stream ready to send ...')
     return send_file(file_stream, mimetype="image/png")
 
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=True, host='0.0.0.0')
