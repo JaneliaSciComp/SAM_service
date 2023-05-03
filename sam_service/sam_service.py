@@ -1,12 +1,12 @@
 import logging
 import base64
+import warnings
 from io import BytesIO
 import os
 from flask import Flask, render_template, request, redirect, flash, send_file, Response
 import cv2
 import numpy as np
 import torch
-import warnings
 
 from segment_anything import sam_model_registry, SamPredictor
 from segment_anything.utils.onnx import SamOnnxModel
@@ -172,20 +172,30 @@ def from_box_model():
         flash("No y coordinate specified")
         return redirect("/")
     y_coordinate = request.form.get("y")
+    # get image dimensions
+    if "img_x" not in request.form:
+        flash("No x dimension specified")
+        return redirect("/")
+    x_dimension = request.form.get("img_x")
+    if "img_y" not in request.form:
+        flash("No y dimension specified")
+        return redirect("/")
+    y_dimension = request.form.get("img_y")
+
     logging.info('coordinates loaded from POST input ...')
 
     # pass everything to the prediction method
-    mask_image = predict_from_embedded(reshaped, [x_coordinate, y_coordinate], [1200,1800])
+    mask_image = predict_from_embedded(
+            reshaped,
+            [x_coordinate, y_coordinate],
+            [int(y_dimension),int(x_dimension)]
+    )
     logging.info('mask returned from predictor ...')
 
     # return the mask.
     file_stream = BytesIO(mask_image)
     logging.info('file_stream ready to send ...')
     return send_file(file_stream, mimetype="image/png")
-
-
-
-
 
 
 @app.route("/embedded_model", methods=["POST"])

@@ -28,12 +28,12 @@
       <input name="y" id="y" type="text" /><br />
       <button type="submit">Predict</button>
     </form>
+
     <h2>Generate embedded image model from image</h2>
      <form method="POST" action="/embedded_model" enctype="multipart/form-data">
       <input name="image" id="image" type="file" /><br />
       <button type="submit">Get Model</button>
     </form>
-
 
     <h2>Generate mask from embedded image model</h2>
      <form method="POST" action="/from_model" enctype="multipart/form-data">
@@ -42,6 +42,11 @@
       <input name="x" id="x" type="text" />
       <label for="y">y</label>
       <input name="y" id="y" type="text" /><br />
+      <h4>Original Image Dimensions</h4>
+      <label for="img_x">x</label>
+      <input name="img_x" id="img_x" type="text" />
+      <label for="img_y">y</label>
+      <input name="img_y" id="img_y" type="text" /><br />
       <button type="submit">Get Mask</button>
     </form>
 
