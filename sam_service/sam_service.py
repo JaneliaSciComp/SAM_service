@@ -161,6 +161,12 @@ def from_box_model():
         return redirect("/")
 
     file = request.files["model"]
+
+    # empty file without a filename.
+    if file.filename == "":
+        flash("No file selected")
+        return redirect("/")
+
     file_data = file.read()
     arr_bytes = base64.b64decode(file_data)
 
@@ -217,16 +223,16 @@ def embedded_model():
         return redirect("/")
 
     file = request.files["image"]
-    file_data = file.read()
-
-    nparr = np.frombuffer(file_data, np.uint8)
-    img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-    logging.info('image loaded from POST input ...')
 
     # empty file without a filename.
     if file.filename == "":
-        flash("No selected file")
+        flash("No file selected")
         return redirect("/")
+
+    file_data = file.read()
+    nparr = np.frombuffer(file_data, np.uint8)
+    img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    logging.info('image loaded from POST input ...')
 
     # pass everything to the prediction method
     box_model = get_box_model(img)
@@ -255,17 +261,18 @@ def prediction():
         return redirect("/")
 
     file = request.files["image"]
-    file_data = file.read()
-
-    nparr = np.frombuffer(file_data, np.uint8)
-    img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-    logging.info('image loaded from POST input ...')
 
     # If the user does not select a file, the browser submits an
     # empty file without a filename.
     if file.filename == "":
-        flash("No selected file")
+        flash("No file selected")
         return redirect("/")
+
+    file_data = file.read()
+    nparr = np.frombuffer(file_data, np.uint8)
+    img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    logging.info('image loaded from POST input ...')
+
 
     # get the point coordinates
     if "x" not in request.form:
