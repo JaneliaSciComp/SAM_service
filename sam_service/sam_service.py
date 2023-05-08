@@ -19,7 +19,10 @@ from onnxruntime.quantization.quantize import quantize_dynamic
 logging.basicConfig(format='%(asctime)s %(message)s', level=logging.INFO)
 
 app = Flask(__name__)
-app.secret_key = "cdas69786cdsa^%#FDS^%$gfd65#$dfs#@$#@?><i:OI)(*-"
+
+app.config.from_file("config.json", load=json.load)
+gpu_count = app.config['GPU_COUNT'] if app.config['GPU_COUNT'] else 1
+app.secret_key = app.config['SECRET_KEY']
 
 logging.info('Creating new predictor...')
 
@@ -27,7 +30,15 @@ module_dir = os.path.dirname(__file__)
 
 model_type = "vit_h"
 checkpoint = os.path.join(module_dir, "sam_vit_h_4b8939.pth")
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
+device = 'cpu'
+if torch.cuda.is_available():
+    device = 'cuda'
+    # if gpus are specified on the command line, then use a gpu based
+    # on the process id, to distribute the load across the gpus by
+    # flask process
+    if args.gpu > 1:
+        device = f'cuda:{str(os.getpid() % args.gpu)}'
+
 sam = sam_model_registry[model_type](checkpoint=checkpoint)
 sam.to(device=device)
 

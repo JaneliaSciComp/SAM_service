@@ -1,6 +1,7 @@
 import os
 import base64
 import warnings
+import json
 from io import BytesIO
 import logging
 from fastapi import FastAPI, File, Form, UploadFile, Response
@@ -27,6 +28,9 @@ app = FastAPI(
     },
 )
 
+with open('config.json', 'r') as f:
+    config = json.load(f)
+
 logger.info('Creating new predictor...')
 module_dir = os.path.dirname(__file__)
 
@@ -38,6 +42,10 @@ if torch.cuda.is_available():
     # if gpus are specified in the config file, then use a gpu based
     # on the process id, to distribute the load across the gpus by
     # flask process
+    gpu_count = config.get('GPU_COUNT', 1)
+    if gpu_count > 1:
+        device = f'cuda:{str(os.getpid() % gpu_count)}'
+
 
 sam = sam_model_registry[model_type](checkpoint=checkpoint)
 sam.to(device=device)
