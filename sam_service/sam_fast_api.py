@@ -6,7 +6,7 @@ from io import BytesIO
 import logging
 from fastapi import FastAPI, File, Form, UploadFile, Response
 from typing import Annotated
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse, RedirectResponse
 import torch
 
 import cv2
@@ -27,6 +27,7 @@ app = FastAPI(
         "url": "https://www.janelia.org/open-science/software-licensing",
     },
 )
+
 
 with open('config.json', 'r') as f:
     config = json.load(f)
@@ -163,6 +164,11 @@ def predict_from_embedded(image_embedding, coords, img_dimensions):
     mask_image = masks.reshape(h, w, 1) * 255
     _, buffer = cv2.imencode('.png', mask_image)
     return buffer
+
+
+@app.get("/", include_in_schema=False)
+async def docs_redirect():
+    return RedirectResponse("/docs")
 
 
 @app.post("/from_model")
