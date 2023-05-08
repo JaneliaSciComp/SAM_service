@@ -17,6 +17,7 @@ import paintera_sam.sam_model as model
 import onnxruntime
 from onnxruntime.quantization import QuantType
 from onnxruntime.quantization.quantize import quantize_dynamic
+from loguru import logger
 
 app = FastAPI(
     title="SAM Service",
@@ -25,7 +26,6 @@ app = FastAPI(
         "url": "https://www.janelia.org/open-science/software-licensing",
     },
 )
-logger = logging.getLogger(__name__)
 
 logger.info('Creating new predictor...')
 module_dir = os.path.dirname(__file__)
@@ -46,6 +46,7 @@ sam_predictor = SamPredictor(sam)
 logger.info('Created new predictor')
 
 def create_onnx_runtime():
+    logger.info('Creating new onnx runtime...')
 
     # there needs to be a seperate onnx_sam model that is sent to the cpu,
     # because the onnx export occurs on the cpu and not the gpu.
@@ -102,6 +103,7 @@ def create_onnx_runtime():
         weight_type=QuantType.QUInt8,
     )
     onnx_model_path = onnx_model_quantized_path
+    logger.info('Created new onnx runtime...')
 
     return onnxruntime.InferenceSession(onnx_model_path)
 
@@ -125,6 +127,7 @@ def get_box_model(cv_image):
 
 
 def predict_from_embedded(image_embedding, coords, img_dimensions):
+    logger.info("running embedded prediction")
     input_point = np.array([coords])
     input_label = np.array([1])
     onnx_coord = np.concatenate([input_point, np.array([[0.0, 0.0]])], axis=0)[None, :, :]
@@ -163,12 +166,14 @@ async def from_embedded_model(
     img_y: Annotated[int, Form()]
 ):
     """accepts an embedded image model, coordinates and returns a mask"""
+    logger.info('Started from route ...')
     file_data = await model.read()
     arr_bytes = base64.b64decode(file_data)
     nparr = np.frombuffer(arr_bytes, dtype=np.float32)
     # restore the orginal shape of the numpy array, because frombuffer will
     # only create a one dimensional array.
     reshaped = nparr.reshape((1,256,64,64))
+    logger.info('embedded image loaded from POST input ...')
 
     # pass everything to the prediction method
     mask_image = predict_from_embedded(
@@ -176,9 +181,11 @@ async def from_embedded_model(
             [x, y],
             [img_y,img_x]
     )
+    logger.info('mask returned from predictor ...')
 
     # return the mask.
     file_stream = BytesIO(mask_image)
+    logger.info('file_stream ready to send ...')
     return StreamingResponse(iter(lambda: file_stream.read(4096), b""), media_type="image/png")
 
 
@@ -188,17 +195,21 @@ async def embedded_model(
     response: Response
 ):
     """accepts an input image and returns a segement_anything box model"""
+    logger.info('Started box_model route ...')
     file_data = await image.read()
     nparr = np.frombuffer(file_data, np.uint8)
     img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    logger.info('image loaded from POST input ...')
 
     # pass everything to the prediction method
     box_model = get_box_model(img)
+    logger.info('model generated ...')
 
     # return the model as base64 string.
     arr_bytes = box_model.tobytes()
     b64_bytes = base64.b64encode(arr_bytes)
     b64_string = b64_bytes.decode('utf-8')
+    logger.info('model encoded to base64 string ...')
     return b64_string
 
 
@@ -209,9 +220,13 @@ async def predict_form(
     y: Annotated[int, Form()],
 ):
     """accepts an input image and coordinates and returns a prediction mask"""
+    logger.info('Started prediction route ...')
     file_data = await image.read()
+    logger.info('image loaded from POST input ...')
     nparr = np.frombuffer(file_data, np.uint8)
     img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
     mask_image = predict(img, [x, y])
+    logger.info('mask returned from predictor ...')
     file_stream = BytesIO(mask_image)
+    logger.info('file_stream ready to send ...')
     return StreamingResponse(iter(lambda: file_stream.read(4096), b""), media_type="image/png")
