@@ -1,6 +1,7 @@
 import logging
 import base64
 import warnings
+import json
 from io import BytesIO
 import os
 from flask import Flask, render_template, request, redirect, flash, send_file, Response
@@ -36,8 +37,8 @@ if torch.cuda.is_available():
     # if gpus are specified on the command line, then use a gpu based
     # on the process id, to distribute the load across the gpus by
     # flask process
-    if args.gpu > 1:
-        device = f'cuda:{str(os.getpid() % args.gpu)}'
+    if gpu_count > 1:
+        device = f'cuda:{str(os.getpid() % gpu_count)}'
 
 sam = sam_model_registry[model_type](checkpoint=checkpoint)
 sam.to(device=device)
@@ -307,4 +308,4 @@ def prediction():
 
 
 if __name__ == "__main__":
-    app.run(debug=True, host='0.0.0.0', port='5050')
+    app.run(debug=True, host='0.0.0.0', port='5000')
