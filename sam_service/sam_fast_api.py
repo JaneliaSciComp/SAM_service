@@ -39,6 +39,7 @@ model_type = "vit_h"
 checkpoint = os.path.join(module_dir, "sam_vit_h_4b8939.pth")
 device = 'cpu'
 if torch.cuda.is_available():
+    logger.info('using cuda device for predictions and embedding')
     device = 'cuda'
     # if gpus are specified in the config file, then use a gpu based
     # on the process id, to distribute the load across the gpus by
@@ -62,7 +63,7 @@ def create_onnx_runtime():
     onnx_sam = sam_model_registry[model_type](checkpoint=checkpoint)
     onnx_sam.to(device='cpu')
 
-    onnx_model_path = "sam_onnx.onnx"
+    onnx_model_path = f"{str(os.getpid())}.sam_onnx.onnx"
 
     onnx_model = SamOnnxModel(onnx_sam, return_single_mask=True)
 
@@ -101,7 +102,7 @@ def create_onnx_runtime():
                 dynamic_axes=dynamic_axes,
             )
 
-    onnx_model_quantized_path = "sam_onnx_quantized_example.onnx"
+    onnx_model_quantized_path = f"{str(os.getpid())}.sam_onnx_quantized_example.onnx"
 
     quantize_dynamic(
         model_input=onnx_model_path,
@@ -136,7 +137,7 @@ def get_box_model(cv_image):
 
 
 def predict_from_embedded(image_embedding, coords, img_dimensions):
-    logger.info("running embedded prediction")
+    logger.info(f"running embedded prediction on {device}")
     input_point = np.array([coords])
     input_label = np.array([1])
     onnx_coord = np.concatenate([input_point, np.array([[0.0, 0.0]])], axis=0)[None, :, :]
@@ -180,7 +181,7 @@ async def from_embedded_model(
     img_y: Annotated[int, Form()]
 ):
     """accepts an embedded image model, coordinates and returns a mask"""
-    logger.info('Started from route ...')
+    logger.info('Started from model route ...')
     file_data = await model.read()
     arr_bytes = base64.b64decode(file_data)
     nparr = np.frombuffer(arr_bytes, dtype=np.float32)
