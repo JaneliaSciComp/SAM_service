@@ -123,7 +123,7 @@ ort_session = create_onnx_runtime()
 
 
 def predict(cv_image, coords):
-    logger.info("running prediction")
+    logger.info(f"running prediction on {device}")
     sam_predictor.set_image(cv_image, image_format='BGR')
     masks = model.predict_current_image(sam_predictor, *coords, cv_image, show=False)
     _, buffer = cv2.imencode('.png', masks[0] * 255)
@@ -131,7 +131,7 @@ def predict(cv_image, coords):
 
 
 def get_box_model(cv_image):
-    logger.info("embedding image")
+    logger.info(f"embedding image on {device}")
     sam_predictor.set_image(cv_image, image_format='BGR')
     return sam_predictor.get_image_embedding().cpu().numpy()
 
