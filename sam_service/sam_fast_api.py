@@ -6,7 +6,7 @@ from io import BytesIO
 import logging
 from fastapi import FastAPI, File, Form, UploadFile, Response
 from typing import Annotated
-from fastapi.responses import FileResponse, StreamingResponse, RedirectResponse
+from fastapi.responses import FileResponse, StreamingResponse, RedirectResponse, PlainTextResponse
 import torch
 
 import cv2
@@ -204,7 +204,7 @@ async def from_embedded_model(
     return StreamingResponse(iter(lambda: file_stream.read(4096), b""), media_type="image/png")
 
 
-@app.post("/embedded_model")
+@app.post("/embedded_model", response_class=PlainTextResponse)
 async def embedded_model(
     image: Annotated[UploadFile, File()],
     response: Response
