@@ -12,17 +12,36 @@ To get started with SAM Service, follow these steps:
 ```
 git clone git@github.com:JaneliaSciComp/SAM_service.git
 ```
-2. Install the necessary packages using conda: 
+2. copy the model checkpoint file to the sam_service directory
+
+ - It can be downloaded from https://github.com/facebookresearch/segment-anything#model-checkpoints
+ - You want the sam_vit_h_4b8939.pth checkpoint.
+  
+```
+cp sam_vit_h_4b8939.pth SAM_service/sam_service
+```
+
+3. Clone the paintera-sam repo alongside this one
+```
+git clone git@github.com:cmhulbert/paintera-sam.git
+```
+
+4. Update the PYTHONPATH
+```
+export PYTHONPATH=/opt/sam_service/paintera-sam/:$PYTHONPATH
+```
+
+5. Install the necessary packages using conda: 
 ```
 conda env create -f environment.yml
 conda activate segment_anything
 ```
-3. Start the API: 
+6. Start the API: 
 ```
 uvicorn sam_fast_api:app --access-log --workers 8 --forwarded-allow-ips='*' --proxy-headers --uds /tmp/uvicorn.sock
 ```
-4. Configure the nginx virtual host with the file found in `nginx.conf`
-5. connect to the service in your browser: `http://your-service.com/`
+7. Configure the nginx virtual host with the file found in `nginx.conf`
+8. connect to the service in your browser: `http://your-service.com/`
 
 ## API Endpoints
 
