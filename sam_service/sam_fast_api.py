@@ -44,9 +44,10 @@ if torch.cuda.is_available():
     # if gpus are specified in the config file, then use a gpu based
     # on the process id, to distribute the load across the gpus by
     # flask process
-    gpu_count = config.get('GPU_COUNT', 1)
+    gpus = config.get('GPUS', [0])
+    gpu_count = len(gpus)
     if gpu_count > 1:
-        device = f'cuda:{str(os.getpid() % gpu_count)}'
+        device = f'cuda:{str(gpus[os.getpid() % gpu_count])}'
 
 
 sam = sam_model_registry[model_type](checkpoint=checkpoint)

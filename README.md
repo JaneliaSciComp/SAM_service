@@ -56,7 +56,7 @@ Documentation for the endpoints is provided by the service and can be found at t
 
 ## Configuration
 
-SAM Service can be configured by modifying the `config.py` file. This file includes settings for available GPUS and log levels.
+SAM Service can be configured by modifying the `config.json` file. This file includes settings for available GPUS and log levels.
 
 ## Contributing
 

@@ -1,4 +1,4 @@
 {
     "SECRET_KEY": "cdas69786cdsa^%#FDS^%$gfd65#$dfs#@$#@?><i:OI)(*-",
-    "GPU_COUNT": 8
+    "GPUS": [0, 1, 2, 3, 4, 5, 6, 7]
 }
