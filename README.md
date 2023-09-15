@@ -8,6 +8,11 @@ SAM Service is a Python-based web service that utilizes FastAPI and Uvicorn to c
 
 To get started with SAM Service, follow these steps:
 
+1. Make sure you have the cuda libraries installed.
+```
+sudo apt install nvidia-cuda-toolkit
+```
+
 1. Clone the repository: 
 ```
 git clone git@github.com:JaneliaSciComp/SAM_service.git
@@ -21,27 +26,38 @@ git clone git@github.com:JaneliaSciComp/SAM_service.git
 cp sam_vit_h_4b8939.pth SAM_service/sam_service
 ```
 
-3. Clone the paintera-sam repo alongside this one
-```
-git clone git@github.com:cmhulbert/paintera-sam.git
-```
-
-4. Update the PYTHONPATH
-```
-export PYTHONPATH=/opt/sam_service/paintera-sam/:$PYTHONPATH
-```
-
-5. Install the necessary packages using conda: 
+3. Install the necessary packages using conda: 
 ```
 conda env create -f environment.yml
 conda activate segment_anything
 ```
-6. Start the API: 
+4. Clone the paintera-sam repo alongside this one
+```
+git clone git@github.com:cmhulbert/paintera-sam.git
+cd paintera-sam
+pip install --user -e .
+```
+
+5. Start the API: 
 ```
 uvicorn sam_fast_api:app --access-log --workers 8 --forwarded-allow-ips='*' --proxy-headers --uds /tmp/uvicorn.sock
 ```
-7. Configure the nginx virtual host with the file found in `nginx.conf`
-8. connect to the service in your browser: `http://your-service.com/`
+6. Configure nginx with the file found in `nginx.conf`
+```
+sudo apt-get install nginx
+sudo cp nginx.conf /etc/nginx/sites-enabled/sam_service
+sudo rm /etc/nginx/sites-enabled/default
+sudo systemctl restart nginx
+```
+- ### Issues
+    - #### Nginx cant connect to port 80
+        - You may have another server, such as apache, already listening on that port. Shut down that service before starting up nginx.  
+        eg:  ```sudo systemctl stop apache2```
+#
+7. connect to the service in your browser: `http://your-service.com/`
+    - if you are running on your laptop, `http://localhost` 
+
+
 
 ## API Endpoints
 
