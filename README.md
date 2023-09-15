@@ -7,6 +7,7 @@ SAM Service is a Python-based web service that utilizes FastAPI and Uvicorn to c
 ## Getting Started
 
 To get started with SAM Service, follow these steps:
+- NB: These steps were performed on ubuntu linux. Your packages/package manager commands, eg; 'apt', may vary.
 
 1. Make sure you have the cuda libraries installed.
 ```
