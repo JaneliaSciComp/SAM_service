@@ -2,9 +2,10 @@ import os
 import base64
 import warnings
 import json
+import gzip
 from io import BytesIO
 import logging
-from fastapi import FastAPI, File, Form, UploadFile, Response
+from fastapi import FastAPI, File, Form, UploadFile, Response, Query
 from typing import Annotated
 from fastapi.responses import FileResponse, StreamingResponse, RedirectResponse, PlainTextResponse
 import torch
@@ -208,7 +209,7 @@ async def from_embedded_model(
 @app.post("/embedded_model", response_class=PlainTextResponse)
 async def embedded_model(
     image: Annotated[UploadFile, File()],
-    response: Response
+    encoding: str = Query("nones", description="compress: Response compressed with gzip")
 ):
     """accepts an input image and returns a segement_anything box model"""
     logger.info('Started box_model route ...')
@@ -226,7 +227,17 @@ async def embedded_model(
     b64_bytes = base64.b64encode(arr_bytes)
     b64_string = b64_bytes.decode('utf-8')
     logger.info('model encoded to base64 string ...')
-    return b64_string
+
+    if encoding != 'compress':
+        return b64_string
+
+    compressed_data = gzip.compress(b64_bytes)
+    headers = {
+      "Content-Type": "application/gzip",
+      "Content-Encoding": "gzip",
+    }
+
+    return Response(content=compressed_data, headers=headers)
 
 
 @app.post("/prediction")
