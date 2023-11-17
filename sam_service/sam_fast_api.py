@@ -209,7 +209,7 @@ async def from_embedded_model(
 @app.post("/embedded_model", response_class=PlainTextResponse)
 async def embedded_model(
     image: Annotated[UploadFile, File()],
-    encoding: str = Query("nones", description="compress: Response compressed with gzip")
+    encoding: str = Query("none", description="compress: Response compressed with gzip")
 ):
     """accepts an input image and returns a segement_anything box model"""
     logger.info('Started box_model route ...')
