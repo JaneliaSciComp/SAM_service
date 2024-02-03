@@ -11,6 +11,7 @@ from fastapi.responses import StreamingResponse, RedirectResponse, PlainTextResp
 import torch
 from loguru import logger
 from sam import SAM
+import utils
 
 app = FastAPI(
     title="SAM Service",
@@ -60,7 +61,7 @@ async def from_embedded_model(
     logger.info('Started from model route ...')
     file_data = await model.read()
     arr_bytes = base64.b64decode(file_data)
-    embedding = sam.buffer_to_embedding(arr_bytes)
+    embedding = utils.buffer_to_embedding(arr_bytes)
     logger.info('embedded image loaded from POST input ...')
 
     # pass everything to the prediction method
@@ -85,7 +86,7 @@ async def embedded_model(
     """accepts an input image and returns a segement_anything box model"""
     logger.info('Started box_model route ...')
     file_data = await image.read()
-    img = sam.buffer_to_image(file_data)
+    img = utils.buffer_to_image(file_data)
     logger.info('image loaded from POST input ...')
 
     # pass everything to the prediction method
@@ -120,7 +121,7 @@ async def predict_form(
     logger.info('Started prediction route ...')
     file_data = await image.read()
     logger.info('image loaded from POST input ...')
-    img = sam.buffer_to_image(file_data)
+    img = utils.buffer_to_image(file_data)
     mask_image = sam.predict(img, [x, y])
     logger.info('mask returned from predictor ...')
     file_stream = BytesIO(mask_image)

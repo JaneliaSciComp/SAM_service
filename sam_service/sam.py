@@ -33,15 +33,15 @@ class SAM:
         self.sam = sam_model_registry[model_type](checkpoint=checkpoint)
         self.sam.to(device=device)
 
-        logger.info('Creating new predictor...')
+        logger.info(f"Creating new predictor for {model_type} on {device}...")
         self.sam_predictor = SamPredictor(self.sam)
-        logger.info('Created new predictor')
+        logger.debug("Created new predictor")
 
         self.ort_session = self.create_onnx_runtime(model_type, checkpoint)
 
             
     def create_onnx_runtime(self, model_type, checkpoint):
-        logger.info('Creating new onnx runtime...')
+        logger.info(f"Creating new ONNX runtime for {model_type}...")
 
         # there needs to be a seperate onnx_sam model that is sent to the cpu,
         # because the onnx export occurs on the cpu and not the gpu.
@@ -98,13 +98,13 @@ class SAM:
             weight_type=QuantType.QUInt8,
         )
         onnx_model_path = onnx_model_quantized_path
-        logger.info('Created new onnx runtime...')
+        logger.debug('Created new ONNX runtime')
 
         return onnxruntime.InferenceSession(onnx_model_path)
 
 
     def predict(self, cv_image, coords):
-        logger.info(f"running prediction on {self.device}")
+        logger.info(f"Running prediction on {self.device}")
         self.sam_predictor.set_image(cv_image, image_format='BGR')
         masks = model.predict_current_image(self.sam_predictor, *coords, cv_image, show=False)
         _, buffer = cv2.imencode('.png', masks[0] * 255)
@@ -112,7 +112,7 @@ class SAM:
 
 
     def predict_from_embedded(self, image_embedding, coords, img_dimensions):
-        logger.info(f"running embedded prediction on {self.device}")
+        logger.info(f"Running embedded prediction on {self.device}")
         input_point = np.array([coords])
         input_label = np.array([1])
         onnx_coord = np.concatenate([input_point, np.array([[0.0, 0.0]])], axis=0)[None, :, :]
@@ -143,18 +143,6 @@ class SAM:
 
 
     def get_box_model(self, cv_image):
-        logger.info(f"embedding image on {self.device}")
+        logger.info(f"Embedding image on {self.device}")
         self.sam_predictor.set_image(cv_image, image_format='BGR')
         return self.sam_predictor.get_image_embedding().cpu().numpy()
-
-
-    def buffer_to_image(self, buffer):
-        nparr = np.frombuffer(buffer, np.uint8)
-        return cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-
-
-    def buffer_to_embedding(self, buffer):
-        nparr = np.frombuffer(buffer, dtype=np.float32)
-        # restore the orginal shape of the numpy array, because frombuffer will
-        # only create a one dimensional array.
-        return nparr.reshape((1,256,64,64))
