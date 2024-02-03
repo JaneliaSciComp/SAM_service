@@ -1,17 +1,21 @@
 import os
+import sys
+import tempfile
+import atexit
+import shutil
 import base64
 import warnings
 import json
 import gzip
 from io import BytesIO
-import logging
-from fastapi import FastAPI, File, Form, UploadFile, Response, Query
-from typing import Annotated
-from fastapi.responses import FileResponse, StreamingResponse, RedirectResponse, PlainTextResponse
-import torch
 
-import cv2
+from typing import Annotated
+from fastapi import FastAPI, File, Form, UploadFile, Response, Query
+from fastapi.responses import StreamingResponse, RedirectResponse, PlainTextResponse
+
 import numpy as np
+import torch
+import cv2
 
 from segment_anything import sam_model_registry, SamPredictor
 from segment_anything.utils.onnx import SamOnnxModel
@@ -21,10 +25,6 @@ from onnxruntime.quantization import QuantType
 from onnxruntime.quantization.quantize import quantize_dynamic
 from loguru import logger
 
-import tempfile
-import atexit
-import shutil
-import sys
 
 app = FastAPI(
     title="SAM Service",
