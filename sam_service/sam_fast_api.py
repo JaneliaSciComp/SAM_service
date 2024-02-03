@@ -21,6 +21,11 @@ from onnxruntime.quantization import QuantType
 from onnxruntime.quantization.quantize import quantize_dynamic
 from loguru import logger
 
+import tempfile
+import atexit
+import shutil
+import sys
+
 app = FastAPI(
     title="SAM Service",
     license_info={
@@ -38,6 +43,17 @@ module_dir = os.path.dirname(__file__)
 
 model_type = "vit_h"
 checkpoint = os.path.join(module_dir, "sam_vit_h_4b8939.pth")
+
+temp_dir = tempfile.mkdtemp()
+
+@atexit.register
+def cleanup_temp_dir():
+    try:
+        shutil.rmtree(temp_dir)
+    except IOError:
+        sys.stderr.write('Failed to clean up temp dir {}'.format(temp_dir))
+
+
 device = 'cpu'
 if torch.cuda.is_available():
     logger.info('using cuda device for predictions and embedding')
@@ -65,7 +81,7 @@ def create_onnx_runtime():
     onnx_sam = sam_model_registry[model_type](checkpoint=checkpoint)
     onnx_sam.to(device='cpu')
 
-    onnx_model_path = f"{str(os.getpid())}.sam_onnx.onnx"
+    onnx_model_path = os.path.join(temp_dir, f"{str(os.getpid())}.sam_onnx.onnx")
 
     onnx_model = SamOnnxModel(onnx_sam, return_single_mask=True)
 
@@ -104,7 +120,7 @@ def create_onnx_runtime():
                 dynamic_axes=dynamic_axes,
             )
 
-    onnx_model_quantized_path = f"{str(os.getpid())}.sam_onnx_quantized_example.onnx"
+    onnx_model_quantized_path = os.path.join(temp_dir, f"{str(os.getpid())}.sam_onnx_quantized_example.onnx")
 
     quantize_dynamic(
         model_input=onnx_model_path,
