@@ -2,23 +2,20 @@ import os
 import base64
 import json
 import gzip
-from io import BytesIO
+from asyncio import Lock
+from collections import defaultdict
+from threading import Thread
+from dataclasses import dataclass
+from typing import Annotated, Optional, Callable
 
-from typing import Annotated
 from fastapi import FastAPI, File, Form, UploadFile, Response, Query
 from fastapi.responses import StreamingResponse, RedirectResponse, PlainTextResponse
-
-import torch
 from loguru import logger
+import torch
+import janus
+
 from sam import SAM
 import utils
-
-from dataclasses import dataclass
-from typing import Callable
-from threading import Thread
-from queue import Queue
-import janus
-from collections import defaultdict
 
 app = FastAPI(
     title="SAM Service",
@@ -46,10 +43,13 @@ if torch.cuda.is_available():
     
 @dataclass
 class WorkItem:
+    request_id: int
+    session_id: str
     work_function: Callable
     result_queue: janus.SyncQueue
-    session_id: str
     stale: bool = False
+    def __str__(self):
+        return f"WorkItem(request_id={self.request_id}, session_id={self.session_id}, stale={self.stale})"
 
 logger.info(f"Creating {len(worker_ids)} workers backed by {gpu_count} GPUs")
 
@@ -59,17 +59,18 @@ def worker_loop(worker_id:int, work_queue:janus.SyncQueue[WorkItem]):
     worker_device = device
     if worker_device=='cuda' and gpu_count > 1:
         worker_device = f'cuda:{str(gpus[worker_id % gpu_count])}'
-    logger.info(f"Created worker thread {worker_id} running on {worker_device}")
+    logger.info(f"Creating worker thread {worker_id} running on {worker_device}...")
     sam = SAM(worker_device, model_type, checkpoint)
-
+    logger.info(f"Worker thread {worker_id} ready")
     while True:
         item = work_queue.get()
         if item.stale:
-            logger.warning(f"Ignoring stale work item for session {item.session_id}")
+            logger.warning(f"Ignoring {item}")
+            item.result_queue.put(None)
         else:
-            logger.info(f"Worker {worker_id} processing item")
+            logger.info(f"Worker {worker_id} processing {item}")
             result = item.work_function(sam)
-            logger.info(f"Worker {worker_id} processed item")
+            logger.info(f"Worker {worker_id} processed {item}")
             item.result_queue.put(result)
         work_queue.task_done()
 
@@ -116,16 +117,33 @@ async def docs_redirect():
 #     return StreamingResponse(iter(lambda: file_stream.read(4096), b""), media_type="image/png")
 
 
+app = FastAPI()
+counter_lock = Lock()
+counter = 0
+
 @app.post("/embedded_model", response_class=PlainTextResponse)
 async def embedded_model(
-    image: Annotated[UploadFile, File()],
+    image: Annotated[UploadFile, File()],    
+    session_id: str = Form(description="UUID identifying a client"),
+    purge_pending: Optional[bool] = Form(False, description="Purge pending requests for this client"),
     encoding: str = Query("none", description="compress: Response compressed with gzip"),
-    session_id: str = Query("none", description="UUID identifying a client"),
-    purge_pending: bool = Query(False, description="Purge pending requests for this client")
 ):
     """Accepts an input image and returns a segment_anything box model
     """
-    logger.debug('Started route for embedded_model')
+    global counter
+    request_id = None
+    async with counter_lock:
+        request_id = counter
+        counter += 1
+
+    logger.debug(f"R{request_id} - Started route for embedded_model")
+
+    if session_id and purge_pending:
+        for item in session_dict[session_id]:
+            logger.warning(f"R{request_id} - Marking {item} as stale")
+            item.stale = True
+
+    logger.trace(f"R{request_id} - Reading image")
     file_data = await image.read()
     img = utils.buffer_to_image(file_data)
 
@@ -133,42 +151,47 @@ async def embedded_model(
         return sam.get_box_model(img)
 
     result_queue = janus.Queue()
-    work_item = WorkItem(work_function=do_work, 
-                         result_queue=result_queue.sync_q,
-                         session_id=session_id)
-
-    if session_id and purge_pending:
-        for work_item in session_dict[session_id]:
-            logger.warning(f"Marking work item as stale for session {session_id}")
-            work_item.stale = True
-
+    work_item = WorkItem(request_id=request_id,
+                         session_id=session_id,
+                         work_function=do_work, 
+                         result_queue=result_queue.sync_q)
+    
+    logger.trace(f"R{request_id} - Adding {work_item} to session dict")
     session_dict[session_id].append(work_item)
 
-    logger.debug("Putting work function on the work queue")
+    logger.trace(f"R{request_id} - Putting work function on the work queue")
     await work_queue.async_q.put(work_item)
 
-    logger.debug("Waiting for embedding to be completed by worker...")
+    logger.debug(f"R{request_id} - Waiting for embedding to be completed by worker...")
     box_model = await result_queue.async_q.get()
-    logger.debug('Embedding received')
+
+    logger.trace(f"R{request_id} - Removing {work_item} from session dict")
+    session_dict[session_id].remove(work_item)
+
+    if box_model is None:
+        logger.debug(f"R{request_id} - Returning code 499 Client Closed Request")
+        return Response(status_code=499)
+
+    logger.trace(f"R{request_id} - Got embedding")
 
     # return the model as base64 string.
     arr_bytes = box_model.tobytes()
     b64_bytes = base64.b64encode(arr_bytes)
     b64_string = b64_bytes.decode('utf-8')
-    logger.debug("Embedding encoded to base64 string")
+    logger.trace(f"Embedding encoded to base64 string")
 
     if encoding != 'compress':
-        logger.debug('Returning uncompressed embedding')
+        logger.debug(f"R{request_id} - Returning uncompressed embedding")
         return b64_string
 
-    logger.debug('Compressing embedding...')
+    logger.trace('Compressing embedding...')
     compressed_data = gzip.compress(b64_bytes)
     headers = {
       "Content-Type": "application/gzip",
       "Content-Encoding": "gzip",
     }
     
-    logger.debug('Returning compressed embedding')
+    logger.debug(f"R{request_id} - Returning compressed embedding")
     return Response(content=compressed_data, headers=headers)
 
 

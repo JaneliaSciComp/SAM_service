@@ -104,7 +104,7 @@ class SAM:
 
 
     def predict(self, cv_image, coords):
-        logger.info(f"Running prediction on {self.device}")
+        logger.trace(f"Running prediction on {self.device}")
         self.sam_predictor.set_image(cv_image, image_format='BGR')
         masks = model.predict_current_image(self.sam_predictor, *coords, cv_image, show=False)
         _, buffer = cv2.imencode('.png', masks[0] * 255)
@@ -112,7 +112,7 @@ class SAM:
 
 
     def predict_from_embedded(self, image_embedding, coords, img_dimensions):
-        logger.info(f"Running embedded prediction on {self.device}")
+        logger.trace(f"Running embedded prediction on {self.device}")
         input_point = np.array([coords])
         input_label = np.array([1])
         onnx_coord = np.concatenate([input_point, np.array([[0.0, 0.0]])], axis=0)[None, :, :]
@@ -143,6 +143,6 @@ class SAM:
 
 
     def get_box_model(self, cv_image):
-        logger.info(f"Embedding image on {self.device}")
+        logger.trace(f"Embedding image on {self.device}")
         self.sam_predictor.set_image(cv_image, image_format='BGR')
         return self.sam_predictor.get_image_embedding().cpu().numpy()
