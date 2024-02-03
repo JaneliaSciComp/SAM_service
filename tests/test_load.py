@@ -31,7 +31,7 @@ if __name__ == "__main__":
 
     def test_SAM(worker_id):
         times = []
-        for request_id in range(args.num_requests):
+        for _ in range(args.num_requests):
             url = f"{args.base_url}/embedded_model"
             files = {'image': (input.name, open(input.absolute(), 'rb'), 'image/png', {'Expires': '0'})}
             r = requests.post(url, files=files)
@@ -48,7 +48,7 @@ if __name__ == "__main__":
 
         all = pd.concat(series)
 
-        if args.display:
+        if args.describe:
             print(all.describe())
         else:
             print("Workers\tRequests\tMean\tStd\tMin\tP25\tP50\tP75\tMax")

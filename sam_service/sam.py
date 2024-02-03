@@ -33,15 +33,15 @@ class SAM:
         self.sam = sam_model_registry[model_type](checkpoint=checkpoint)
         self.sam.to(device=device)
 
-        logger.info(f"Creating new predictor for {model_type} on {device}...")
+        logger.debug(f"Creating new predictor for {model_type} on {device}...")
         self.sam_predictor = SamPredictor(self.sam)
         logger.debug("Created new predictor")
 
-        self.ort_session = self.create_onnx_runtime(model_type, checkpoint)
+        #self.ort_session = self.create_onnx_runtime(model_type, checkpoint)
 
             
     def create_onnx_runtime(self, model_type, checkpoint):
-        logger.info(f"Creating new ONNX runtime for {model_type}...")
+        logger.debug(f"Creating new ONNX runtime for {model_type}...")
 
         # there needs to be a seperate onnx_sam model that is sent to the cpu,
         # because the onnx export occurs on the cpu and not the gpu.

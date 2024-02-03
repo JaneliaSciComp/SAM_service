@@ -18,6 +18,7 @@ from typing import Callable
 from threading import Thread
 from queue import Queue
 import janus
+from collections import defaultdict
 
 app = FastAPI(
     title="SAM Service",
@@ -47,27 +48,33 @@ if torch.cuda.is_available():
 class WorkItem:
     work_function: Callable
     result_queue: janus.SyncQueue
+    session_id: str
     stale: bool = False
 
 logger.info(f"Creating {len(worker_ids)} workers backed by {gpu_count} GPUs")
 
 def worker_loop(worker_id:int, work_queue:janus.SyncQueue[WorkItem]):
+    """ Loops forever and pulls work from the given work queue.
+    """
     worker_device = device
     if worker_device=='cuda' and gpu_count > 1:
         worker_device = f'cuda:{str(gpus[worker_id % gpu_count])}'
     logger.info(f"Created worker thread {worker_id} running on {worker_device}")
     sam = SAM(worker_device, model_type, checkpoint)
 
-    # Loop forever and wait for work to do
     while True:
         item = work_queue.get()
-        if not item.stale:
+        if item.stale:
+            logger.warning(f"Ignoring stale work item for session {item.session_id}")
+        else:
             logger.info(f"Worker {worker_id} processing item")
             result = item.work_function(sam)
             logger.info(f"Worker {worker_id} processed item")
             item.result_queue.put(result)
         work_queue.task_done()
 
+
+session_dict = defaultdict(list)
 work_queue = janus.Queue()
 workers = []
 for worker_id in worker_ids:
@@ -112,7 +119,9 @@ async def docs_redirect():
 @app.post("/embedded_model", response_class=PlainTextResponse)
 async def embedded_model(
     image: Annotated[UploadFile, File()],
-    encoding: str = Query("none", description="compress: Response compressed with gzip")
+    encoding: str = Query("none", description="compress: Response compressed with gzip"),
+    session_id: str = Query("none", description="UUID identifying a client"),
+    purge_pending: bool = Query(False, description="Purge pending requests for this client")
 ):
     """Accepts an input image and returns a segment_anything box model
     """
@@ -124,7 +133,17 @@ async def embedded_model(
         return sam.get_box_model(img)
 
     result_queue = janus.Queue()
-    work_item = WorkItem(work_function=do_work, result_queue=result_queue.sync_q)
+    work_item = WorkItem(work_function=do_work, 
+                         result_queue=result_queue.sync_q,
+                         session_id=session_id)
+
+    if session_id and purge_pending:
+        for work_item in session_dict[session_id]:
+            logger.warning(f"Marking work item as stale for session {session_id}")
+            work_item.stale = True
+
+    session_dict[session_id].append(work_item)
+
     logger.debug("Putting work function on the work queue")
     await work_queue.async_q.put(work_item)
 
