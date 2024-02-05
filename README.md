@@ -2,12 +2,11 @@
 
 # SAM Service
 
-SAM Service is a Python-based web service that utilizes FastAPI and Uvicorn to create a fast and efficient API for retrieving a Segment Anything model. It also uses Nginx as a reverse proxy for handling requests and improving performance. SAM stands for "Segment Anything Model," and the service is designed to make it easy for developers to generate an embedded image model for use with an ONNX runtime.
+SAM Service is a Python-based web service that utilizes FastAPI and Uvicorn to create a fast and efficient API for retrieving a Segment Anything model. It also uses Nginx as a reverse proxy for handling HTTPS and improving performance. SAM stands for "Segment Anything Model," and the service is designed to make it easy for developers to generate an embedded image model for use with an ONNX runtime.
 
 ## Getting Started
 
-To get started with SAM Service, follow these steps:
-- NB: These steps were performed on ubuntu linux. Your packages/package manager commands, eg; 'apt', may vary.
+Follow the steps below to run the SAM Service. Please note that these steps were performed on Ubuntu linux. Your packages and package manager commands (e.g. `apt`) may vary.
 
 1. Make sure you have the cuda libraries installed.
 ```
@@ -18,10 +17,10 @@ sudo apt install nvidia-cuda-toolkit
 ```
 git clone git@github.com:JaneliaSciComp/SAM_service.git
 ```
-2. copy the model checkpoint file to the sam_service directory
+2. Copy the model checkpoint file to the sam_service directory
 
- - It can be downloaded from https://github.com/facebookresearch/segment-anything#model-checkpoints
- - You want the sam_vit_h_4b8939.pth checkpoint.
+ - These can be downloaded from https://github.com/facebookresearch/segment-anything#model-checkpoints
+ - The `sam_vit_h_4b8939.pth` checkpoint is known to work
   
 ```
 cp sam_vit_h_4b8939.pth SAM_service/sam_service
@@ -32,8 +31,10 @@ cp sam_vit_h_4b8939.pth SAM_service/sam_service
 conda env create -f environment.yml
 conda activate segment_anything
 ```
+
 4. Clone the paintera-sam repo alongside this one
 ```
+cd ..
 git clone git@github.com:cmhulbert/paintera-sam.git
 cd paintera-sam
 pip install --user -e .
@@ -41,39 +42,71 @@ pip install --user -e .
 
 5. Start the API: 
 ```
-uvicorn sam_fast_api:app --access-log --workers 8 --forwarded-allow-ips='*' --proxy-headers --uds /tmp/uvicorn.sock
+cd sam_service
+uvicorn sam_queue:app --access-log --workers 1 --host 0.0.0.0
 ```
-6. Configure nginx with the file found in `nginx.conf`
+
+Note that using one worker is very important here. Using more than one worker will spin up additional processes and each one will try to use the configured GPUs. The FAST API layer is async and doesn't require more than one worker to handle many clients.
+
+## Deploying in Production 
+
+In production we use Nginx as a reverse proxy to handle and terminate HTTPS traffic. In this mode, Uvicorn is configured to run on a socket for improved performance. 
+
+1. Run Uvicorn on a socket:
+```
+uvicorn sam_fast_api:app --access-log --workers 1 --forwarded-allow-ips='*' --proxy-headers --uds /tmp/uvicorn.sock
+```
+
+2. Configure nginx with the file found in `nginx.conf`
+
+You can run nginx using Docker like this:
+```
+docker run --name sam -v ./nginx.conf:/etc/nginx/conf.d/sam.conf -v /tmp/uvicorn.sock:/tmp/uvicorn.sock -p 80:80 -d nginx
+```
+
+Alternatively, you can install nginx on the system, e.g.:
 ```
 sudo apt-get install nginx
 sudo cp nginx.conf /etc/nginx/sites-enabled/sam_service
 sudo rm /etc/nginx/sites-enabled/default
 sudo systemctl restart nginx
 ```
-- ### Issues
-    - #### Nginx cant connect to port 80
-        - You may have another server, such as apache, already listening on that port. Shut down that service before starting up nginx.  
-        eg:  ```sudo systemctl stop apache2```
-#
-7. connect to the service in your browser: `http://your-service.com/`
-    - if you are running on your laptop, `http://localhost` 
 
+3. Connect to the service in your browser: `https://your-service.com/`
+    - If you are running the service locally, `http://localhost:8000`
 
+## Common Issues
 
-## API Endpoints
+### Nginx can't connect to port 80
 
-SAM Service includes a number of pre-built endpoints that you can use right out of the box. These endpoints include:
+You may have another service (like Apache) already listening on that port. Shut down that service before starting up nginx, e.g. `sudo systemctl stop apache2`
 
-- `/embedded_model`: This endpoint will take an image and return an embedded segment anything model for use in an ONNX runtime. 
-- `/from_model`: Returns a mask for the provided model and point.
-- `/prediction`: When you want just a mask to show the segmented area around a point in an image, use this. 
+## Testing
 
-## Documentation
-Documentation for the endpoints is provided by the service and can be found at the `/docs` or `/redoc` urls.
+There are scripts in the `./test` directory which can be used to verify that the service is working as intended, and to run stress tests. Use the `segment_anything` conda environment created above.
+
+The following command starts 3 worker processes and each one submits 10 requests to the service, one at a time:
+```
+python tests/test_load.py -u http://localhost:8080 -i tests/em1.png -w 3 -r 10
+```
+
+This command starts 10 worker processes and each one submits 2 requests in parallel using a thread pool:
+```
+python tests/test_cancel.py -u http://f15u30:8000 -i tests/em1.png -w 10 -r 2 --describe
+```
+
+## Endpoint Documentation
+
+Documentation for the endpoints is provided by the service and can be found at the `/docs` or `/redoc` URLs.
 
 ## Configuration
 
-SAM Service can be configured by modifying the `config.json` file. This file includes settings for available GPUS and log levels.
+SAM Service can be configured by modifying the `config.json` file. The following keys
+
+* `LOG_LEVEL`: maximum level of logging (`TRACE`, `DEBUG`, `INFO`, `WARNING`, `ERROR`)
+* `MODEL_TYPE`: Segment Anything [model type](https://github.com/facebookresearch/segment-anything#model-checkpoints)
+* `CHECKPOINT_FILE`: filename of the Segment Anything model checkpoint file
+* `GPUS`: array of indicies of the GPUs to use, e.g. `[0,1,2,3]``
 
 ## Contributing
 
