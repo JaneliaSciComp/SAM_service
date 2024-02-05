@@ -142,8 +142,8 @@ async def new_session_id():
 @app.post("/embedded_model", response_class=PlainTextResponse)
 async def embedded_model(
     image: Annotated[UploadFile, File()],    
-    session_id: str = Form(description="UUID identifying a client"),
-    cancel_pending: Optional[bool] = Form(False, description="Purge pending requests for this client"),
+    session_id: Optional[str] = Form(None, description="UUID identifying the client"),
+    cancel_pending: Optional[bool] = Form(False, description="Cancel any pending requests for this client before processing this one"),
     encoding: str = Query("none", description="compress: Response compressed with gzip"),
 ):
     """Accepts an input image and returns a segment_anything box model
@@ -177,8 +177,9 @@ async def embedded_model(
                          work_function=do_work, 
                          result_queue=result_queue.sync_q)
     
-    logger.trace(f"R{request_id} - Adding {work_item} to session dict")
-    session_dict[session_id].append(work_item)
+    if session_id:
+        logger.trace(f"R{request_id} - Adding {work_item} to session dict")
+        session_dict[session_id].append(work_item)
 
     logger.trace(f"R{request_id} - Putting work function on the work queue")
     await work_queue.async_q.put(work_item)
@@ -186,8 +187,9 @@ async def embedded_model(
     logger.debug(f"R{request_id} - Waiting for embedding to be completed by worker ...")
     box_model = await result_queue.async_q.get()
 
-    logger.trace(f"R{request_id} - Removing {work_item} from session dict")
-    session_dict[session_id].remove(work_item)
+    if session_id:
+        logger.trace(f"R{request_id} - Removing {work_item} from session dict")
+        session_dict[session_id].remove(work_item)
 
     headers = {}
     if work_item.cancelled:
