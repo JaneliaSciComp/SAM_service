@@ -1,11 +1,14 @@
 #!/usr/bin/env python
+#
+# This program allows basic load testing of the SAM service by spinning up 
+# N processes (i.e. clients) which each hit the service with R requests serially. 
+#
 
 import argparse
 import pathlib
 import requests
 import pandas as pd
 from multiprocessing import Pool
-
 
 if __name__ == "__main__":
 
