@@ -1,4 +1,7 @@
 {
     "SECRET_KEY": "cdas69786cdsa^%#FDS^%$gfd65#$dfs#@$#@?><i:OI)(*-",
+    "LOG_LEVEL": "INFO",
+    "MODEL_TYPE": "vit_h",
+    "CHECKPOINT_FILE": "sam_vit_h_4b8939.pth",
     "GPUS": [0, 1, 2, 3, 4, 5, 6, 7]
 }

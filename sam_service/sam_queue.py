@@ -1,7 +1,9 @@
 import os
+import sys
 import base64
 import json
 import gzip
+import uuid
 from asyncio import Lock
 from collections import defaultdict
 from threading import Thread
@@ -10,48 +12,47 @@ from typing import Annotated, Optional, Callable
 
 from fastapi import FastAPI, File, Form, UploadFile, Response, Query
 from fastapi.responses import StreamingResponse, RedirectResponse, PlainTextResponse
-from loguru import logger
+
 import torch
 import janus
+from loguru import logger
 
 from sam import SAM
 import utils
 
-app = FastAPI(
-    title="SAM Service",
-    license_info={
-        "name": "Janelia Open-Source Software License",
-        "url": "https://www.janelia.org/open-science/software-licensing",
-    },
-)
-
+# Load configuration
 with open('config.json', 'r') as f:
     config = json.load(f)
 
+# Configure logging
+log_level = config.get('LOG_LEVEL', "DEBUG")
+logger.remove()
+logger.add(sys.stderr, enqueue=True, level=log_level)
+
+# Get configuration parameters
 model_type = config.get('MODEL_TYPE', "vit_h")
 module_dir = os.path.dirname(__file__)
 checkpoint_file = config.get('CHECKPOINT_FILE', "sam_vit_h_4b8939.pth")
 checkpoint = os.path.join(module_dir, checkpoint_file)
-worker_ids = config.get('WORKERS', [0])
 gpus = config.get('GPUS', [])
 gpu_count = len(gpus)
 
+# Check if a CUDA is available
 device = 'cpu'
 if torch.cuda.is_available():
     logger.info('using cuda device for predictions and embedding')
     device = 'cuda'
-    
+
 @dataclass
 class WorkItem:
     request_id: int
     session_id: str
     work_function: Callable
     result_queue: janus.SyncQueue
-    stale: bool = False
+    cancelled: bool = False
     def __str__(self):
-        return f"WorkItem(request_id={self.request_id}, session_id={self.session_id}, stale={self.stale})"
+        return f"WorkItem(request_id={self.request_id}, session_id={self.session_id}, cancelled={self.cancelled})"
 
-logger.info(f"Creating {len(worker_ids)} workers backed by {gpu_count} GPUs")
 
 def worker_loop(worker_id:int, work_queue:janus.SyncQueue[WorkItem]):
     """ Loops forever and pulls work from the given work queue.
@@ -59,13 +60,15 @@ def worker_loop(worker_id:int, work_queue:janus.SyncQueue[WorkItem]):
     worker_device = device
     if worker_device=='cuda' and gpu_count > 1:
         worker_device = f'cuda:{str(gpus[worker_id % gpu_count])}'
-    logger.info(f"Creating worker thread {worker_id} running on {worker_device}...")
+
+    logger.info(f"Creating worker thread {worker_id} running on {worker_device} ...")
     sam = SAM(worker_device, model_type, checkpoint)
     logger.info(f"Worker thread {worker_id} ready")
+
     while True:
         item = work_queue.get()
-        if item.stale:
-            logger.warning(f"Ignoring {item}")
+        if item.cancelled:
+            logger.info(f"Worker {worker_id} ignoring cancelled {item}")
             item.result_queue.put(None)
         else:
             logger.info(f"Worker {worker_id} processing {item}")
@@ -75,18 +78,37 @@ def worker_loop(worker_id:int, work_queue:janus.SyncQueue[WorkItem]):
         work_queue.task_done()
 
 
+# Global state shared with all threads
 session_dict = defaultdict(list)
 work_queue = janus.Queue()
-workers = []
+counter_lock = Lock()
+counter = 0
+
+# Start the workers
+worker_ids = gpus or [0]
+logger.info(f"Creating {len(worker_ids)} workers backed by {gpu_count} GPUs")
 for worker_id in worker_ids:
     t = Thread(target=worker_loop, daemon=True, args=(worker_id, work_queue.sync_q,))
     t.start()
-    workers.append(t)
+
+# Create the API
+app = FastAPI(
+    title="SAM Service",
+    license_info={
+        "name": "Janelia Open-Source Software License",
+        "url": "https://www.janelia.org/open-science/software-licensing",
+    },
+)
 
 @app.get("/", include_in_schema=False)
 async def docs_redirect():
     return RedirectResponse("/docs")
 
+
+@app.get("/new_session_id", response_class=PlainTextResponse)
+async def new_session_id():
+    # uuid1 creates time-based identifiers which guarantee uniqueness
+    return uuid.uuid1()
 
 # @app.post("/from_model")
 # async def from_embedded_model(
@@ -117,15 +139,11 @@ async def docs_redirect():
 #     return StreamingResponse(iter(lambda: file_stream.read(4096), b""), media_type="image/png")
 
 
-app = FastAPI()
-counter_lock = Lock()
-counter = 0
-
 @app.post("/embedded_model", response_class=PlainTextResponse)
 async def embedded_model(
     image: Annotated[UploadFile, File()],    
     session_id: str = Form(description="UUID identifying a client"),
-    purge_pending: Optional[bool] = Form(False, description="Purge pending requests for this client"),
+    cancel_pending: Optional[bool] = Form(False, description="Purge pending requests for this client"),
     encoding: str = Query("none", description="compress: Response compressed with gzip"),
 ):
     """Accepts an input image and returns a segment_anything box model
@@ -135,13 +153,16 @@ async def embedded_model(
     async with counter_lock:
         request_id = counter
         counter += 1
+        # Python can handle much larger ints but I can't
+        if counter==2**32: counter = 0
 
-    logger.debug(f"R{request_id} - Started route for embedded_model")
+    logger.debug(f"R{request_id} - Started embedded_model for {session_id}")
 
-    if session_id and purge_pending:
+    # Cancel previous requests if necessary
+    if session_id and cancel_pending:
         for item in session_dict[session_id]:
-            logger.warning(f"R{request_id} - Marking {item} as stale")
-            item.stale = True
+            logger.debug(f"R{request_id} - Marking {item} as cancelled")
+            item.cancelled = True
 
     logger.trace(f"R{request_id} - Reading image")
     file_data = await image.read()
@@ -162,19 +183,23 @@ async def embedded_model(
     logger.trace(f"R{request_id} - Putting work function on the work queue")
     await work_queue.async_q.put(work_item)
 
-    logger.debug(f"R{request_id} - Waiting for embedding to be completed by worker...")
+    logger.debug(f"R{request_id} - Waiting for embedding to be completed by worker ...")
     box_model = await result_queue.async_q.get()
 
     logger.trace(f"R{request_id} - Removing {work_item} from session dict")
     session_dict[session_id].remove(work_item)
 
+    headers = {}
+    if work_item.cancelled:
+        headers["Cancelled-By-Client"] = "1"
+
     if box_model is None:
         logger.debug(f"R{request_id} - Returning code 499 Client Closed Request")
-        return Response(status_code=499)
+        return Response(status_code=499, headers=headers)
 
     logger.trace(f"R{request_id} - Got embedding")
 
-    # return the model as base64 string.
+    # Serialize the model as base64 string
     arr_bytes = box_model.tobytes()
     b64_bytes = base64.b64encode(arr_bytes)
     b64_string = b64_bytes.decode('utf-8')
@@ -184,14 +209,13 @@ async def embedded_model(
         logger.debug(f"R{request_id} - Returning uncompressed embedding")
         return b64_string
 
-    logger.trace('Compressing embedding...')
+    # Compress with GZIP
+    logger.trace('Compressing embedding ...')
     compressed_data = gzip.compress(b64_bytes)
-    headers = {
-      "Content-Type": "application/gzip",
-      "Content-Encoding": "gzip",
-    }
-    
+
     logger.debug(f"R{request_id} - Returning compressed embedding")
+    headers["Content-Type"] = "application/gzip"
+    headers["Content-Encoding"] = "gzip"
     return Response(content=compressed_data, headers=headers)
 
 
