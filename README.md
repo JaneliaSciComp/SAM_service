@@ -50,7 +50,34 @@ Note that using one worker is very important here. Using more than one worker wi
 
 ## Deploying in Production 
 
-In production we use Nginx as a reverse proxy to handle and terminate HTTPS traffic. In this mode, Uvicorn is configured to run on a socket for improved performance. 
+### Docker
+
+To run this service using Docker, you must first [configure Docker to work with GPUs](https://saturncloud.io/blog/how-to-use-gpu-from-a-docker-container-a-guide-for-data-scientists-and-software-engineers/). 
+
+Also, you must use a recent version of docker-compose which has GPU support. The 2.24.5 version is known to work. 
+
+The `docker-compose.yml` assumes that you put the TLS certificates in /opt/deploy/ssl. The certificate files should be named `fullchain.pem` and `privkey.pem`. 
+
+You should also edit `nginx.conf` to set the server_name to the domain name of your server.
+
+Finally, to start the services run the following:
+```
+cd docker
+docker-compose up
+```
+
+Make sure Docker is enabled to restart after a reboot. 
+
+To rebuild and push the Docker container, execute the following commands where `<version>` is the version number you want to publish:
+
+```
+docker build . -t ghcr.io/janeliascicomp/sam_service:<version>
+docker push ghcr.io/janeliascicomp/sam_service:<version>
+```
+
+## Bare Metal
+
+You can also set up everything yourself on bare metal. In production we use Nginx as a reverse proxy to handle and terminate HTTPS traffic. In this mode, Uvicorn is configured to run on a socket for improved performance. 
 
 1. Run Uvicorn on a socket:
 ```
@@ -59,12 +86,6 @@ uvicorn sam_queue:app --access-log --workers 1 --forwarded-allow-ips='*' --proxy
 
 2. Configure nginx with the file found in `nginx.conf`
 
-You can run nginx using Docker like this:
-```
-docker run --name sam -v ./nginx.conf:/etc/nginx/conf.d/sam.conf -v /tmp/uvicorn.sock:/tmp/uvicorn.sock -p 80:80 -d nginx
-```
-
-Alternatively, you can install nginx on the system, e.g.:
 ```
 sudo apt-get install nginx
 sudo cp nginx.conf /etc/nginx/sites-enabled/sam_service
