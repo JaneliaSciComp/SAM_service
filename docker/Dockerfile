@@ -15,5 +15,6 @@ RUN mamba env create -f environment.yml \
 WORKDIR /app/paintera-sam
 RUN mamba run -n segment_anything pip install --user -e .
 
-ENTRYPOINT [ "/app/SAM_service/docker/entrypoint.sh" ]
+RUN apt-get update && apt-get install libgl1 -y
 
+ENTRYPOINT [ "/app/SAM_service/docker/entrypoint.sh" ]
