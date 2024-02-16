@@ -54,7 +54,7 @@ In production we use Nginx as a reverse proxy to handle and terminate HTTPS traf
 
 1. Run Uvicorn on a socket:
 ```
-uvicorn sam_fast_api:app --access-log --workers 1 --forwarded-allow-ips='*' --proxy-headers --uds /tmp/uvicorn.sock
+uvicorn sam_queue:app --access-log --workers 1 --forwarded-allow-ips='*' --proxy-headers --uds /tmp/uvicorn.sock
 ```
 
 2. Configure nginx with the file found in `nginx.conf`
