@@ -50,11 +50,9 @@ Note that using one worker is very important here. Using more than one worker wi
 
 ## Deploying in Production 
 
-### Docker
+### Docker Compose
 
-To run this service using Docker, you must first [configure Docker to work with GPUs](https://saturncloud.io/blog/how-to-use-gpu-from-a-docker-container-a-guide-for-data-scientists-and-software-engineers/). 
-
-Also, you must use a recent version of docker-compose which has GPU support. The 2.24.5 version is known to work. 
+To run this service using Docker, you must first [configure Docker to work with GPUs](https://saturncloud.io/blog/how-to-use-gpu-from-a-docker-container-a-guide-for-data-scientists-and-software-engineers/). Also, you must use a recent version of docker-compose which has GPU support. The 2.24.5 version is known to work. 
 
 The `docker-compose.yml` assumes that you put the TLS certificates in /opt/deploy/ssl. The certificate files should be named `fullchain.pem` and `privkey.pem`. 
 
