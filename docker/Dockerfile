@@ -12,5 +12,8 @@ WORKDIR /app/SAM_service
 RUN mamba env create -f environment.yml \
     && mamba clean --all -y
 
+WORKDIR /app/paintera-sam
+RUN mamba run -n segment_anything pip install --user -e .
+
 ENTRYPOINT [ "/app/SAM_service/docker/entrypoint.sh" ]
 
