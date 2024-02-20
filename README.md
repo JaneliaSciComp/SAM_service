@@ -61,7 +61,7 @@ You can also set up everything yourself on bare metal. In production we use Ngin
 3. Link the Systemd file and start the Uvicorn service:
 
 ```
-sudo ln -s /opt/deploy/SAM_service/sam.service /etc/systemd/system/sam.service
+sudo ln -s /opt/deploy/SAM_service/systemd/sam.service /etc/systemd/system/sam.service
 sudo systemctl daemon-reload
 sudo systemctl enable sam.service
 sudo systemctl start sam.service
@@ -77,18 +77,17 @@ sudo journalctl -fu sam.service
 
 ```
 sudo apt-get install nginx
-sudo cp nginx.conf /etc/nginx/sites-enabled/sam_service
+sudo cp ./systemd/nginx.conf /etc/nginx/sites-enabled/sam_service
 sudo rm /etc/nginx/sites-enabled/default
 sudo systemctl enable nginx
 sudo systemctl start nginx
 ```
 
-3. Connect to the service in your browser: `https://your-service.com/`
-    - If you are running the service locally, `http://localhost:8000`
+3. Connect to the service in your browser at `https://your-server-name`
 
 ### Docker Compose
 
-Note: this has been prototyped but is not yet used in any deployment. 
+Note: this has been prototyped but is not yet used in any deployment.
 
 To run this service using Docker, you must first [configure Docker to work with GPUs](https://saturncloud.io/blog/how-to-use-gpu-from-a-docker-container-a-guide-for-data-scientists-and-software-engineers/). Also, you must use a recent version of docker-compose which has GPU support. The 2.24.5 version is known to work. The following command can be used to test whether Docker is set up correctly:
 

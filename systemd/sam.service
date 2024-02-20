@@ -1,0 +1,17 @@
+[Unit]
+Description=SAM Service
+After=syslog.target network.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+Environment=MPLCONFIGDIR=/opt/deploy/tmp
+WorkingDirectory=/opt/deploy/SAM_service/sam_service
+
+ExecStart=/opt/deploy/SAM_service/systemd/start.sh
+ExecReload=/bin/kill -HUP ${MAINPID}
+
+[Install]
+WantedBy=multi-user.target
+
