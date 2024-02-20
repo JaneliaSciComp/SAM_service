@@ -54,18 +54,33 @@ Note that using one worker is very important here. Using more than one worker wi
 
 You can also set up everything yourself on bare metal. In production we use Nginx as a reverse proxy to handle and terminate HTTPS traffic. In this mode, Uvicorn is configured to run on a socket for improved performance. 
 
-1. Run Uvicorn on a socket:
+1. Clone this repository into /opt/deploy/SAM_service
+
+2. Follow the other setps in "Getting Started" above
+
+3. Link the Systemd file and start the Uvicorn service:
+
 ```
-uvicorn sam_queue:app --access-log --workers 1 --forwarded-allow-ips='*' --proxy-headers --uds /tmp/uvicorn.sock
+sudo ln -s /opt/deploy/SAM_service/sam.service /etc/systemd/system/sam.service
+sudo systemctl daemon-reload
+sudo systemctl enable sam.service
+sudo systemctl start sam.service
 ```
 
-2. Configure nginx with the file found in `nginx.conf`
+4. View the logs to make sure the service came up correctly:
+
+```
+sudo journalctl -fu sam.service
+```
+
+5. Install and configure nginx with the file found in `nginx.conf`
 
 ```
 sudo apt-get install nginx
 sudo cp nginx.conf /etc/nginx/sites-enabled/sam_service
 sudo rm /etc/nginx/sites-enabled/default
-sudo systemctl restart nginx
+sudo systemctl enable nginx
+sudo systemctl start nginx
 ```
 
 3. Connect to the service in your browser: `https://your-service.com/`
