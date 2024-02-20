@@ -50,7 +50,6 @@ Note that using one worker is very important here. Using more than one worker wi
 
 ## Deploying in Production 
 
-
 ## Bare Metal
 
 You can also set up everything yourself on bare metal. In production we use Nginx as a reverse proxy to handle and terminate HTTPS traffic. In this mode, Uvicorn is configured to run on a socket for improved performance. 
@@ -73,6 +72,8 @@ sudo systemctl restart nginx
     - If you are running the service locally, `http://localhost:8000`
 
 ### Docker Compose
+
+Note: this has been prototyped but is not yet used in any deployment. 
 
 To run this service using Docker, you must first [configure Docker to work with GPUs](https://saturncloud.io/blog/how-to-use-gpu-from-a-docker-container-a-guide-for-data-scientists-and-software-engineers/). Also, you must use a recent version of docker-compose which has GPU support. The 2.24.5 version is known to work. The following command can be used to test whether Docker is set up correctly:
 
