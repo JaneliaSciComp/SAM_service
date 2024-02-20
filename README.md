@@ -50,28 +50,6 @@ Note that using one worker is very important here. Using more than one worker wi
 
 ## Deploying in Production 
 
-### Docker Compose
-
-To run this service using Docker, you must first [configure Docker to work with GPUs](https://saturncloud.io/blog/how-to-use-gpu-from-a-docker-container-a-guide-for-data-scientists-and-software-engineers/). Also, you must use a recent version of docker-compose which has GPU support. The 2.24.5 version is known to work. 
-
-The `docker-compose.yml` assumes that you put the TLS certificates in /opt/deploy/ssl. The certificate files should be named `fullchain.pem` and `privkey.pem`. 
-
-You should also edit `nginx.conf` to set the server_name to the domain name of your server.
-
-Finally, to start the services run the following:
-```
-cd docker
-docker-compose up
-```
-
-Make sure Docker is enabled to restart after a reboot. 
-
-To rebuild and push the Docker container, execute the following commands where `<version>` is the version number you want to publish:
-
-```
-docker build . -t ghcr.io/janeliascicomp/sam_service:<version>
-docker push ghcr.io/janeliascicomp/sam_service:<version>
-```
 
 ## Bare Metal
 
@@ -93,6 +71,31 @@ sudo systemctl restart nginx
 
 3. Connect to the service in your browser: `https://your-service.com/`
     - If you are running the service locally, `http://localhost:8000`
+
+### Docker Compose
+
+To run this service using Docker, you must first [configure Docker to work with GPUs](https://saturncloud.io/blog/how-to-use-gpu-from-a-docker-container-a-guide-for-data-scientists-and-software-engineers/). Also, you must use a recent version of docker-compose which has GPU support. The 2.24.5 version is known to work. The following command can be used to test whether Docker is set up correctly:
+
+```
+docker run -it --rm --gpus all ubuntu nvidia-smi
+```
+
+The `docker-compose.yml` assumes that you put the TLS certificates in /opt/deploy/ssl. The certificate files should be named `fullchain.pem` and `privkey.pem`. 
+
+You should also edit `nginx.conf` to set the server_name to the domain name of your server.
+
+Finally, to start the services run the following:
+```
+cd docker
+docker-compose up
+```
+
+To rebuild and push the Docker container, execute the following commands where `<version>` is the version number you want to publish:
+
+```
+docker build . -t ghcr.io/janeliascicomp/sam_service:<version>
+docker push ghcr.io/janeliascicomp/sam_service:<version>
+```
 
 ## Common Issues
 
