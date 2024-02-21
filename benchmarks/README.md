@@ -2,7 +2,7 @@
 
 ![Line graph depicting average response times for different GPUs under various load conditions](benchmarks.png)
 
-Note the logarithmic Y axis. 
+Note the logarithmic Y axis. Also note that the gpu_l4 host only had a single GPU, so the concurrent performance is not comparable to the others, but we've included it to show how the concurrent performance degrades with a single GPU.
 
 In the single worker case, these are the average response times to encode the [test image](../em1.png):
 
