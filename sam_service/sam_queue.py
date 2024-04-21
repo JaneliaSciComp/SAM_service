@@ -142,8 +142,8 @@ async def new_session_id():
 @app.post("/embedded_model", response_class=PlainTextResponse)
 async def embedded_model(
     image: Annotated[UploadFile, File()],    
-    session_id: Optional[str] = Form(None, description="UUID identifying the client"),
-    cancel_pending: Optional[bool] = Form(False, description="Cancel any pending requests for this client before processing this one"),
+    session_id: Optional[str] = Form(None, description="UUID identifying the session"),
+    cancel_pending: Optional[bool] = Form(False, description="Cancel any pending requests for this session before processing this one"),
     encoding: str = Query("none", description="compress: Response compressed with gzip"),
 ):
     """Accepts an input image and returns a segment_anything box model
@@ -220,6 +220,19 @@ async def embedded_model(
     headers["Content-Encoding"] = "gzip"
     return Response(content=compressed_data, headers=headers)
 
+
+@app.post("/cancel_pending", response_class=PlainTextResponse)
+async def cancel_pending(
+    session_id: Optional[str] = Form(None, description="UUID identifying a session")
+):
+    """Cancel any pending requests for the given session. 
+    """
+    # Cancel previous requests if necessary
+    if session_id:
+        for item in session_dict[session_id]:
+            logger.debug(f"Marking {item} as cancelled")
+            item.cancelled = True
+            
 
 # @app.post("/prediction")
 # async def predict_form(
