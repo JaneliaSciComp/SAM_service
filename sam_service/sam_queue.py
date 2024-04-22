@@ -69,12 +69,12 @@ def worker_loop(worker_id:int, work_queue:janus.SyncQueue[WorkItem]):
         item = work_queue.get()
         if item.cancelled:
             logger.info(f"Worker {worker_id} ignoring cancelled {item}")
-            item.result_queue.put(None)
+            item.result_queue.sync_q.put(None)
         else:
-            logger.info(f"Worker {worker_id} processing {item}")
+            #logger.info(f"Worker {worker_id} processing {item}")
             result = item.work_function(sam)
             logger.info(f"Worker {worker_id} processed {item}")
-            item.result_queue.put(result)
+            item.result_queue.sync_q.put(result)
         work_queue.task_done()
 
 
@@ -163,6 +163,7 @@ async def embedded_model(
         for item in session_dict[session_id]:
             logger.debug(f"R{request_id} - Marking {item} as cancelled")
             item.cancelled = True
+            await item.result_queue.async_q.put(None)
 
     logger.trace(f"R{request_id} - Reading image")
     file_data = await image.read()
@@ -175,7 +176,7 @@ async def embedded_model(
     work_item = WorkItem(request_id=request_id,
                          session_id=session_id,
                          work_function=do_work, 
-                         result_queue=result_queue.sync_q)
+                         result_queue=result_queue)
     
     if session_id:
         logger.trace(f"R{request_id} - Adding {work_item} to session dict")
@@ -232,6 +233,7 @@ async def cancel_pending(
         for item in session_dict[session_id]:
             logger.debug(f"Marking {item} as cancelled")
             item.cancelled = True
+            await item.result_queue.async_q.put(None)
             
 
 # @app.post("/prediction")
