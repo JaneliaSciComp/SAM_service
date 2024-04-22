@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from typing import Annotated, Optional, Callable
 
 from fastapi import FastAPI, File, Form, UploadFile, Response, Query
-from fastapi.responses import StreamingResponse, RedirectResponse, PlainTextResponse
+from fastapi.responses import RedirectResponse, PlainTextResponse
 
 import torch
 import janus
@@ -71,20 +71,19 @@ def worker_loop(worker_id:int, work_queue:janus.SyncQueue[WorkItem]):
             logger.info(f"Worker {worker_id} ignoring cancelled {item}")
             item.result_queue.sync_q.put(None)
         else:
-            #logger.info(f"Worker {worker_id} processing {item}")
             result = item.work_function(sam)
             logger.info(f"Worker {worker_id} processed {item}")
             item.result_queue.sync_q.put(result)
         work_queue.task_done()
 
 
-# Global state shared with all threads
+# Global state that keeps track of work
 session_dict = defaultdict(list)
 work_queue = janus.Queue()
 counter_lock = Lock()
 counter = 0
 
-# Start the workers
+# Start a worker thread for each GPU
 worker_ids = gpus or [0]
 logger.info(f"Creating {len(worker_ids)} workers backed by {gpu_count} GPUs")
 for worker_id in worker_ids:
@@ -109,34 +108,6 @@ async def docs_redirect():
 async def new_session_id():
     # uuid1 creates time-based identifiers which guarantee uniqueness
     return uuid.uuid1()
-
-# @app.post("/from_model")
-# async def from_embedded_model(
-#     model: Annotated[UploadFile, File()],
-#     x: Annotated[int, Form()],
-#     y: Annotated[int, Form()],
-#     img_x: Annotated[int, Form()],
-#     img_y: Annotated[int, Form()]
-# ):
-#     """accepts an embedded image model, coordinates and returns a mask"""
-#     logger.info('Started from model route ...')
-#     file_data = await model.read()
-#     arr_bytes = base64.b64decode(file_data)
-#     embedding = sam.buffer_to_embedding(arr_bytes)
-#     logger.info('embedded image loaded from POST input ...')
-
-#     # pass everything to the prediction method
-#     mask_image = sam.predict_from_embedded(
-#             embedding,
-#             [x, y],
-#             [img_y,img_x]
-#     )
-#     logger.info('mask returned from predictor ...')
-
-#     # return the mask.
-#     file_stream = BytesIO(mask_image)
-#     logger.info('file_stream ready to send ...')
-#     return StreamingResponse(iter(lambda: file_stream.read(4096), b""), media_type="image/png")
 
 
 @app.post("/embedded_model", response_class=PlainTextResponse)
@@ -163,6 +134,7 @@ async def embedded_model(
         for item in session_dict[session_id]:
             logger.debug(f"R{request_id} - Marking {item} as cancelled")
             item.cancelled = True
+            # Send notification to waiting request
             await item.result_queue.async_q.put(None)
 
     logger.trace(f"R{request_id} - Reading image")
@@ -200,22 +172,20 @@ async def embedded_model(
         logger.debug(f"R{request_id} - Returning code 499 Client Closed Request")
         return Response(status_code=499, headers=headers)
 
-    logger.trace(f"R{request_id} - Got embedding")
+    logger.trace(f"R{request_id} - Computed embedding")
 
     # Serialize the model as base64 string
     arr_bytes = box_model.tobytes()
     b64_bytes = base64.b64encode(arr_bytes)
     b64_string = b64_bytes.decode('utf-8')
-    logger.trace(f"Embedding encoded to base64 string")
 
     if encoding != 'compress':
         logger.debug(f"R{request_id} - Returning uncompressed embedding")
         return b64_string
 
-    # Compress with GZIP
+    # Compress embedding with GZIP
     logger.trace('Compressing embedding ...')
     compressed_data = gzip.compress(b64_bytes)
-
     logger.debug(f"R{request_id} - Returning compressed embedding")
     headers["Content-Type"] = "application/gzip"
     headers["Content-Encoding"] = "gzip"
@@ -233,22 +203,5 @@ async def cancel_pending(
         for item in session_dict[session_id]:
             logger.debug(f"Marking {item} as cancelled")
             item.cancelled = True
+            # Send notification to waiting request
             await item.result_queue.async_q.put(None)
-            
-
-# @app.post("/prediction")
-# async def predict_form(
-#     image: Annotated[UploadFile, File()],
-#     x: Annotated[int, Form()],
-#     y: Annotated[int, Form()],
-# ):
-#     """accepts an input image and coordinates and returns a prediction mask"""
-#     logger.info('Started prediction route ...')
-#     file_data = await image.read()
-#     logger.info('image loaded from POST input ...')
-#     img = sam.buffer_to_image(file_data)
-#     mask_image = sam.predict(img, [x, y])
-#     logger.info('mask returned from predictor ...')
-#     file_stream = BytesIO(mask_image)
-#     logger.info('file_stream ready to send ...')
-#     return StreamingResponse(iter(lambda: file_stream.read(4096), b""), media_type="image/png")
