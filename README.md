@@ -4,6 +4,11 @@
 
 SAM Service is a Python-based web service that utilizes FastAPI and Uvicorn to create a fast and efficient API for retrieving a Segment Anything model. It also uses Nginx as a reverse proxy for handling HTTPS and improving performance. SAM stands for "Segment Anything Model," and the service is designed to make it easy for developers to generate an embedded image model for use with an ONNX runtime.
 
+This service supports canceling pending requests, so that the client (e.g. [Paintera](https://github.com/saalfeldlab/paintera)) can send speculative requests and then cancel them before they are processed on the GPU. This is implemented using a work queue and shared state among the worker threads, as illustrated below. 
+
+![sam_queue](https://github.com/JaneliaSciComp/SAM_service/assets/607324/a0cac906-54f4-47a3-9738-1f5210b239d4)
+
+
 ## Getting Started
 
 Follow the steps below to run the SAM Service. Please note that these steps were performed on Ubuntu linux. Your packages and package manager commands (e.g. `apt`) may vary.
