@@ -6,7 +6,7 @@ SAM Service is a Python-based web service that utilizes FastAPI and Uvicorn to c
 
 This service supports canceling pending requests, so that the client (e.g. [Paintera](https://github.com/saalfeldlab/paintera)) can send speculative requests and then cancel them before they are processed on the GPU. This is implemented using a work queue and shared state among the worker threads, as illustrated below. 
 
-![sam_queue](https://github.com/JaneliaSciComp/SAM_service/assets/607324/a0cac906-54f4-47a3-9738-1f5210b239d4)
+![sam_service](https://github.com/JaneliaSciComp/SAM_service/assets/607324/859362e4-0337-430f-a116-060ffcf164e1)
 
 
 ## Getting Started
