@@ -117,7 +117,8 @@ async def new_session_id():
     """ Create a new session identifier that can be used to identify your client 
         in other endpoints. 
     """
-    # uuid1 creates time-based identifiers which guarantee uniqueness
+    # uuid4 creates random identifiers which are harder to spoof 
+    # than a counter, and easier to distinguish in the logs
     return uuid.uuid4()
 
 
