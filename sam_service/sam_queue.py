@@ -83,6 +83,14 @@ work_queue = janus.Queue()
 counter_lock = Lock()
 counter = 0
 
+async def get_request_id():
+    global counter
+    request_id = None
+    async with counter_lock:
+        request_id = counter
+        counter += 1
+    return request_id
+
 # Start a worker thread for each GPU
 worker_ids = gpus or [0]
 logger.info(f"Creating {len(worker_ids)} workers backed by {gpu_count} GPUs")
@@ -106,48 +114,36 @@ async def docs_redirect():
 
 @app.get("/new_session_id", response_class=PlainTextResponse)
 async def new_session_id():
+    """ Create a new session identifier that can be used to identify your client 
+        in other endpoints. 
+    """
     # uuid1 creates time-based identifiers which guarantee uniqueness
     return uuid.uuid1()
 
 
-@app.post("/embedded_model", response_class=PlainTextResponse)
-async def embedded_model(
-    image: Annotated[UploadFile, File()],    
-    session_id: Optional[str] = Form(None, description="UUID identifying the session"),
-    cancel_pending: Optional[bool] = Form(False, description="Cancel any pending requests for this session before processing this one"),
-    encoding: str = Query("none", description="compress: Response compressed with gzip"),
-):
-    """Accepts an input image and returns a segment_anything box model
+async def cancel_pending_work_items(request_id, session_id):
+    """ Cancel all pending work items for the given session.
     """
-    global counter
-    request_id = None
-    async with counter_lock:
-        request_id = counter
-        counter += 1
-        # Python can handle much larger ints but I can't
-        if counter==2**32: counter = 0
+    for item in session_dict[session_id]:
+        logger.debug(f"R{request_id} - Marking {item} as cancelled")
+        item.cancelled = True
+        # Send notification to waiting request
+        await item.result_queue.async_q.put(None)
 
-    logger.debug(f"R{request_id} - Started embedded_model for {session_id}")
 
-    # Cancel previous requests if necessary
-    if session_id and cancel_pending:
-        for item in session_dict[session_id]:
-            logger.debug(f"R{request_id} - Marking {item} as cancelled")
-            item.cancelled = True
-            # Send notification to waiting request
-            await item.result_queue.async_q.put(None)
-
-    logger.trace(f"R{request_id} - Reading image")
-    file_data = await image.read()
-    img = utils.buffer_to_image(file_data)
-
-    def do_work(sam):
-        return sam.get_box_model(img)
-
+async def get_embedding(img, request_id, session_id):
+    """ Asynchronously returns the embedding for the given image. 
+        This function creates a work item that is executed on a GPU by a worker thread.
+        It also handles registering the work item in a global dictionary so that a 
+        session's queued items can be invalidated at any time.
+    """
+    # This result queue is used to communicate the result from the worker thread 
+    # back to this function. We only expect one item to be put on this queue.
     result_queue = janus.Queue()
+
     work_item = WorkItem(request_id=request_id,
                          session_id=session_id,
-                         work_function=do_work, 
+                         work_function=lambda sam: sam.get_box_model(img), 
                          result_queue=result_queue)
     
     if session_id:
@@ -157,25 +153,50 @@ async def embedded_model(
     logger.trace(f"R{request_id} - Putting work function on the work queue")
     await work_queue.async_q.put(work_item)
 
-    logger.debug(f"R{request_id} - Waiting for embedding to be completed by worker ...")
-    box_model = await result_queue.async_q.get()
+    try:
+        logger.debug(f"R{request_id} - Waiting for embedding to be completed by worker ...")
+        return await result_queue.async_q.get()
+    finally:
+        if session_id:
+            logger.trace(f"R{request_id} - Removing {work_item} from session dict")
+            session_dict[session_id].remove(work_item)
+            # Remove the session if there are no items left, to avoid memory leaks
+            if len(session_dict[session_id])==0:
+                del session_dict[session_id]
 
-    if session_id:
-        logger.trace(f"R{request_id} - Removing {work_item} from session dict")
-        session_dict[session_id].remove(work_item)
 
-    headers = {}
-    if work_item.cancelled:
-        headers["Cancelled-By-Client"] = "1"
+@app.post("/embedded_model", response_class=PlainTextResponse)
+async def embedded_model(
+    image: Annotated[UploadFile, File()],    
+    session_id: Optional[str] = Form(None, description="UUID identifying the session"),
+    cancel_pending: Optional[bool] = Form(False, description="Cancel any pending requests for this session before processing this one"),
+    encoding: str = Query("none", description="compress: Response compressed with gzip"),
+):
+    """ Accepts an input image and returns a segment_anything box model.
+        Optionally also cancel any pending requests from the same session. 
+    """
+    request_id = await get_request_id()
+    logger.debug(f"R{request_id} - Started embedded_model for {session_id}")
 
-    if box_model is None:
+    if session_id and cancel_pending:
+        await cancel_pending_work_items(request_id, session_id)
+
+    logger.trace(f"R{request_id} - Reading image")
+    file_data = await image.read()
+    img = utils.buffer_to_image(file_data)
+
+    embedding = await get_embedding(img, request_id, session_id)
+
+    if embedding is None:
         logger.debug(f"R{request_id} - Returning code 499 Client Closed Request")
-        return Response(status_code=499, headers=headers)
+        return Response(status_code=499, headers={
+            "Cancelled-By-Client": "1"
+        })
 
     logger.trace(f"R{request_id} - Computed embedding")
 
-    # Serialize the model as base64 string
-    arr_bytes = box_model.tobytes()
+    # Serialize the embedding as base64 string
+    arr_bytes = embedding.tobytes()
     b64_bytes = base64.b64encode(arr_bytes)
     b64_string = b64_bytes.decode('utf-8')
 
@@ -187,21 +208,18 @@ async def embedded_model(
     logger.trace('Compressing embedding ...')
     compressed_data = gzip.compress(b64_bytes)
     logger.debug(f"R{request_id} - Returning compressed embedding")
-    headers["Content-Type"] = "application/gzip"
-    headers["Content-Encoding"] = "gzip"
-    return Response(content=compressed_data, headers=headers)
+    return Response(content=compressed_data, headers={
+        "Content-Type": "application/gzip",
+        "Content-Encoding": "gzip"
+    })
 
 
 @app.post("/cancel_pending", response_class=PlainTextResponse)
 async def cancel_pending(
-    session_id: Optional[str] = Form(None, description="UUID identifying a session")
+    session_id: str = Form(..., description="UUID identifying a session")
 ):
     """Cancel any pending requests for the given session. 
     """
-    # Cancel previous requests if necessary
-    if session_id:
-        for item in session_dict[session_id]:
-            logger.debug(f"Marking {item} as cancelled")
-            item.cancelled = True
-            # Send notification to waiting request
-            await item.result_queue.async_q.put(None)
+    request_id = await get_request_id()
+    await cancel_pending_work_items(request_id, session_id)
+
