@@ -118,7 +118,7 @@ async def new_session_id():
         in other endpoints. 
     """
     # uuid1 creates time-based identifiers which guarantee uniqueness
-    return uuid.uuid1()
+    return uuid.uuid4()
 
 
 async def cancel_pending_work_items(request_id, session_id):
