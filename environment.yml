@@ -1,8 +1,9 @@
-name: segment_anything
+name: segment_anything3
 channels:
   - pytorch
   - nvidia
   - conda-forge
+  - nodefaults
 dependencies:
   - loguru=0.5.3
   - uvicorn=0.20.0
