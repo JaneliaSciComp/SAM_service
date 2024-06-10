@@ -1,4 +1,4 @@
-name: segment_anything3
+name: segment_anything
 channels:
   - pytorch
   - nvidia
